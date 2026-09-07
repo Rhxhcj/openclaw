@@ -78,6 +78,9 @@ The `docker-seed-e2e` job selects the executable owners of changed E2E helpers
 and the published-upgrade regression gate through one scheduler invocation.
 The published lane runs `legacy-operator-state` against only `openclaw@latest`
 on affected PRs and every canonical `main` push, including docs-only pushes.
+It uses `auto-auth`: successful upgrades must replace the running managed
+Gateway through the baseline updater itself. The narrow unfenced-updater
+refusal case instead proves that the restored baseline Gateway can start.
 PR selection includes `src/cli/update-cli/**`, `src/infra/update-*`,
 `src/infra/package-update-*`, `src/plugins/update.ts`, `src/plugins/update-*`,
 `src/commands/doctor*`, `src/commands/doctor/**`, all `src/state/**`, and
