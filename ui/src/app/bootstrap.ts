@@ -29,6 +29,8 @@ import { parseAgentSessionKey } from "../lib/sessions/session-key.ts";
 import { loadChatObserverDisplayPreference } from "../pages/chat/chat-observer-display.ts";
 import { sendSessionObserverVisibility } from "../pages/chat/chat-observer.ts";
 import { clearStoredChatSnapshots } from "../pages/chat/session-snapshot-invalidation.runtime.ts";
+import { resolveChatSnapshotKey } from "../pages/chat/session-snapshot-key.ts";
+import { prewarmChatSnapshot } from "../pages/chat/session-snapshot-prewarm.ts";
 import {
   isDefaultChatLanding,
   startModelSetupFirstRunRedirectAfterLocation,
@@ -219,6 +221,15 @@ export function bootstrapApplication(): ApplicationRuntime {
   );
   const connectionBootstrap = createConnectionBootstrapCoordinator();
   const bootRecord = readBootRecord(gatewayCredentialScope(settings.gatewayUrl));
+  const warmBoot = bootRecord !== null && documentMode === null && !hasPendingGateway;
+  if (warmBoot && parseAgentSessionKey(settings.sessionKey)) {
+    prewarmChatSnapshot(
+      resolveChatSnapshotKey(
+        { agentsList: bootRecord.agents, hello: null, assistantAgentId: null },
+        { sessionKey: settings.sessionKey },
+      ),
+    );
+  }
   const bootConnectionRevision = gateway.connectionRevision;
   let pendingBootProfileId =
     documentMode === null && !hasPendingGateway ? bootRecord?.profileId : undefined;
@@ -559,7 +570,7 @@ export function bootstrapApplication(): ApplicationRuntime {
     context,
     router,
     documentMode,
-    warmBoot: bootRecord !== null && documentMode === null && !hasPendingGateway,
+    warmBoot,
     focusLocation,
     get pendingGatewayConnection() {
       return pendingGatewayConnection;
