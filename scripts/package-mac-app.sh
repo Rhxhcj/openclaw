@@ -209,7 +209,8 @@ merge_framework_machos() {
   }
 
   while IFS= read -r -d '' file; do
-    if /usr/bin/file "$file" | /usr/bin/grep -q "Mach-O"; then
+    # Drain the output so grep does not give file SIGPIPE under pipefail.
+    if /usr/bin/file "$file" | /usr/bin/grep "Mach-O" >/dev/null; then
       local rel="${file#"$primary"/}"
       local primary_archs
       primary_archs=$(archs_for "$file")
@@ -225,7 +226,7 @@ merge_framework_machos() {
           rm -rf "$tmp_dir"
           exit 1
         fi
-        if /usr/bin/file "$other_file" | /usr/bin/grep -q "Mach-O"; then
+        if /usr/bin/file "$other_file" | /usr/bin/grep "Mach-O" >/dev/null; then
           local other_archs
           other_archs=$(archs_for "$other_file")
           IFS=' ' read -r -a other_arch_array <<< "$other_archs"
