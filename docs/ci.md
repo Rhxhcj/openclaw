@@ -13,6 +13,8 @@ job. Open the page that matches your task.
 
 For the published-upgrade regression gate, see [selection and routing](/ci/scope-and-routing#scope-and-routing), [runner budgets](/ci/capacity#runner-registration-budget), and [Package Acceptance baselines](/ci/release-validation#suite-profiles). Weekly validation is listed under [Update Migration](/ci/scheduled-workflows#update-migration).
 
+Docs-only `main` pushes skip CI. Every canonical `main` push admitted by the CI workflow selects the published-upgrade regression gate.
+
 | Page                                                           | Read it when                                                                                                        |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | [CI pipeline jobs](/ci/pipeline)                               | The job table, the fail-fast order, and the Control UI size budgets.                                                |

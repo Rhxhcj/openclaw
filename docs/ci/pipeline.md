@@ -6,10 +6,10 @@ read_when:
   - You want the order jobs run in and what blocks what
 ---
 
-OpenClaw CI runs on every push to `main`, on every non-draft pull request,
-and on manual dispatch. Push triggers do not ignore Markdown or `docs/**`:
-docs-only canonical pushes still run the published-upgrade regression gate.
-Pull-request docs scoping is unchanged.
+OpenClaw CI runs on pushes to `main` that change a path outside `**/*.md` and
+`docs/**`, on every non-draft pull request, and on manual dispatch. Docs-only
+main pushes skip CI; mixed docs and code pushes still run it. Pull-request docs
+scoping is unchanged.
 Canonical `main` pushes use a two-slot pipeline keyed by run-number parity, so
 at most two integration runs overlap. Each slot is non-canceling and keeps one
 coalesced pending tip: a new merge replaces that slot's older pending run
@@ -77,7 +77,8 @@ the job's uploaded artifacts.
 The `docker-seed-e2e` job selects the executable owners of changed E2E helpers
 and the published-upgrade regression gate through one scheduler invocation.
 The published lane runs `legacy-operator-state` against only `openclaw@latest`
-on affected PRs and every canonical `main` push, including docs-only pushes.
+on affected PRs and every canonical `main` push that runs CI. Docs-only pushes
+are excluded at the workflow trigger; mixed docs and code pushes select the lane.
 It uses `auto-auth`: successful upgrades must replace the running managed
 Gateway through the baseline updater itself. The narrow unfenced-updater
 refusal case instead proves that the restored baseline Gateway can start.
