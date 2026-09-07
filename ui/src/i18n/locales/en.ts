@@ -39,6 +39,19 @@ export const en: TranslationMap & {
     unavailable: "Slot utilization unavailable",
     execHost: "Codex exec",
   },
+  agentsHome: {
+    manage: "Manage agents",
+    create: "New agent",
+    openChat: "Open chat",
+    working: "Working now",
+    lastActive: "Active {time}",
+    neverActive: "No recent activity",
+    noMessage: "No messages yet",
+    loading: "Loading agents…",
+    disconnected: "Connect to the Gateway to see your agents.",
+    loadFailed: "Could not load agents. Try again.",
+    empty: "Your team starts here. Add an agent to get started.",
+  },
   common: {
     health: "Health",
     ok: "OK",
@@ -2344,6 +2357,7 @@ export const en: TranslationMap & {
   tabs: {
     device: "This Mac",
     devicePermissions: "Permissions",
+    agentsHome: "Agents",
     agents: "Agents",
     activity: "Activity",
     meetings: "Meetings",
@@ -2390,6 +2404,7 @@ export const en: TranslationMap & {
   subtitles: {
     device: "App settings and capabilities on this Mac.",
     devicePermissions: "Manage macOS access, location, and computer presence.",
+    agentsHome: "Who is on your team and what they are doing",
     agents: "Workspaces, tools, identities.",
     activity: "Recent sessions across people using this gateway.",
     meetings: "Meeting notes and transcripts across this gateway.",
