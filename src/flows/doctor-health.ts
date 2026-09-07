@@ -16,7 +16,7 @@ const outro = (message: string) => clackOutro(stylePromptTitle(message) ?? messa
 
 const loadConfigModule = createLazyRuntimeModule(() => import("../config/config.js"));
 
-async function assertDoctorDatabaseSchemasCompatible(): Promise<void> {
+async function assertDoctorDatabaseSchemasCompatible(scope?: "state"): Promise<void> {
   const [databasePreflight, agentDatabase, stateDatabase] = await Promise.all([
     import("../state/openclaw-database-preflight.js"),
     import("../state/openclaw-agent-db-contract.js"),
@@ -24,6 +24,7 @@ async function assertDoctorDatabaseSchemasCompatible(): Promise<void> {
   ]);
   const databaseSchemas = await databasePreflight.preflightOpenClawDatabaseSchemas({
     env: process.env,
+    scope,
     supportedVersions: {
       state: stateDatabase.OPENCLAW_STATE_SCHEMA_VERSION,
       agent: agentDatabase.OPENCLAW_AGENT_SCHEMA_VERSION,
@@ -63,6 +64,10 @@ export async function runDoctorHealthFlow(runtime?: RuntimeEnv, options: DoctorO
   const { createDoctorPrompter } = await import("../commands/doctor-prompter.js");
   const prompter = createDoctorPrompter({ runtime: effectiveRuntime, options });
 
+  // Update admission writes its ledger in shared state. A stale Doctor cannot
+  // offer an update that requires opening a database this build cannot read.
+  await assertDoctorDatabaseSchemasCompatible("state");
+
   const { resolveOpenClawPackageRoot } = await import("../infra/openclaw-root.js");
   const root = await resolveOpenClawPackageRoot({
     moduleUrl: import.meta.url,
@@ -82,8 +87,8 @@ export async function runDoctorHealthFlow(runtime?: RuntimeEnv, options: DoctorO
     return;
   }
 
-  // A stale source checkout may update itself, but no diagnostic or repair may
-  // touch state until the surviving build proves it understands every database.
+  // A readable shared database still permits updating past newer agent schemas.
+  // The surviving Doctor must understand every database before diagnostics or repair.
   await assertDoctorDatabaseSchemasCompatible();
   if (options.repair === true || options.yes === true || options.generateGatewayToken === true) {
     const { assertConfigWriteAllowedInCurrentMode } = await loadConfigModule();
