@@ -3,7 +3,12 @@
 import { render } from "lit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { i18n } from "../i18n/index.ts";
-import { renderSessionRowBadges, type SessionPlacementState } from "./session-row-badges.ts";
+import {
+  renderSessionRowBadges,
+  renderSidebarConnectionStatus,
+  resolveSidebarConnectionStatus,
+  type SessionPlacementState,
+} from "./session-row-badges.ts";
 import "./tooltip.ts";
 
 let container: HTMLDivElement;
@@ -39,6 +44,20 @@ function expectTooltipText(badge: Element | null | undefined, text: string) {
     (badge?.closest("openclaw-tooltip") as (HTMLElement & { content?: string }) | null)?.content,
   ).toBe(text);
 }
+
+describe("sidebar initial connection", () => {
+  it.each([false, true])("labels the first connection while offlineStable is %s", (offline) => {
+    const kind = resolveSidebarConnectionStatus({ phase: "connecting", offline });
+    expect(kind).not.toBeNull();
+    if (!kind) {
+      throw new Error("Expected initial connection status");
+    }
+    render(renderSidebarConnectionStatus({ kind, onRetry: () => undefined }), container);
+    expect(container.textContent?.trim()).toBe("Connecting…");
+    expect(container.querySelector("[role=status]")).not.toBeNull();
+    expect(container.querySelector("button")).toBeNull();
+  });
+});
 
 describe("session row placement badges", () => {
   it("names the service and profile without losing conflict or disk attention", () => {
