@@ -56,7 +56,7 @@ the job's uploaded artifacts.
 | `checks-fast-contracts-plugins`  | One setup shared by two sequential weighted plugin contract processes; frozen targets keep separate rows                                                                                                                                                                                                 | Node-relevant changes                                  |
 | `checks-fast-contracts-channels` | One setup shared by two sequential weighted channel contract envelopes; frozen targets keep separate rows                                                                                                                                                                                                | Node-relevant changes                                  |
 | `checks-node-*`                  | Changed-target Node tests on pull requests; compact integration shards on `main`; metadata-complete compact fallback on broad PRs; full named shards on manual and release runs                                                                                                                          | Node-relevant changes                                  |
-| `docker-seed-e2e`                | One Docker scheduler job for the executable `mcp-channels`, `cron-mcp-cleanup`, `mcp-code-mode-gateway`, and `update-channel-switch` owner lanes                                                                                                                                                         | PR changes to their E2E helpers or CI gate owners      |
+| `docker-seed-e2e`                | One Docker scheduler job for the executable MCP, update-channel, Fleet cache, and published-upgrade owner lanes; the published upgrade seeds legacy operator state on `openclaw@latest`                                                                                                                  | Owner PR changes; published upgrade on main pushes     |
 | `check-*`                        | Sharded main local gate equivalent: guards, transient npm-lock validation, bundled-channel config metadata, prod types, lint, dependencies, test types                                                                                                                                                   | Node-relevant changes                                  |
 | `check-additional-*`             | Boundary check stripes (including prompt snapshot drift), session accessor/transcript reader/SQLite transaction boundaries, extension lint groups, package boundary compile/canary, and runtime topology architecture; the pure-reporting plugin SDK API diff runs on manual and release dispatches only | Node-relevant changes                                  |
 | `checks-node-compat-node22`      | Node 22 compatibility build and smoke lane                                                                                                                                                                                                                                                               | Full Release Validation and manual dispatches only     |
@@ -74,15 +74,29 @@ the job's uploaded artifacts.
 | `openclaw-performance`           | Separate workflow: daily/on-demand Kova runtime performance reports with mock-provider, deep-profile, and GPT 5.6 live lanes                                                                                                                                                                             | Scheduled and manual dispatch                          |
 | `docs-external-links`            | Separate workflow: Docs External Link Audit checks external documentation links with lychee and uploads a report; it reports findings without failing, so it never blocks a pull request                                                                                                                 | Scheduled and manual dispatch                          |
 
-The rare path-triggered `docker-seed-e2e` job selects only the executable
-owners of changed E2E helpers and runs them through one scheduler invocation.
+The `docker-seed-e2e` job selects the executable owners of changed E2E helpers
+and the published-upgrade regression gate through one scheduler invocation.
+The published lane runs `legacy-operator-state` against only `openclaw@latest`
+on affected PRs and every canonical `main` push, including docs-only pushes.
+PR selection includes `src/cli/update-cli/**`, `src/infra/update-*`,
+`src/infra/package-update-*`, `src/plugins/update.ts`, `src/plugins/update-*`,
+`src/commands/doctor*`, `src/commands/doctor/**`, all `src/state/**`, and
+`package.json` (including its packaged schema-version metadata). It also includes
+`scripts/e2e/upgrade-survivor*`, `scripts/e2e/lib/upgrade-survivor/**`, the survivor
+policy and baseline resolver, the Docker planner/catalog, and this gate's CI
+workflow and changed-lane planner. Tests independently pin both state and agent
+schema-version constant owners to the published lane.
 Trusted same-repository pull requests request one 32-vCPU Blacksmith runner with
 main and tail parallelism set to 3. The weighted scheduler still admits only one
-weight-three MCP lane at a time; the larger host supplies package-build and
+weight-three MCP or published-upgrade lane at a time; the larger host supplies package-build and
 container capacity. GitHub-hosted, fork, and retry paths run the same selected
-lanes serially. The job is part of `openclaw/ci-gate`. It adds at
-most one runner registration during an affected pull-request window and adds no
-registrations for unrelated pull requests.
+lanes serially. The complete PR job targets at most 12 minutes, including shared
+package preparation and every selected owner lane; its existing 60-minute
+infrastructure timeout is unchanged. Exact-head CI timings must establish
+whether each selection fits that target.
+The job is part of `openclaw/ci-gate`. It uses at most one runner registration per
+selected run; adding the survivor does not increase the existing full-inventory
+registration cap, job count, or matrix fanout.
 
 Standalone Periphery workflows enforce zero dead-code findings for the iOS and macOS apps. The shared OpenClawKit workflow scans both consumers in parallel and reports a declaration only when Periphery emits the same Swift USR from both builds. Its generated `OpenClawProtocol/GatewayModels.swift` schema contract is retained as generator-owned code rather than treated as app-local dead code.
 
@@ -405,6 +419,7 @@ The iOS, macOS, and both shared OpenClawKit Periphery scans always use GitHub-ho
 - **SQLite session lifecycle** runs the built-CLI migration, restart, compaction, cleanup, and session RPC proof only when the diff touches its direct storage/session owners or a reachable session path in the embedded runner. The `build-artifacts` verifier wave runs it against the runtime already built in that job, after the isolated startup-memory measurement. It overlaps independent readers on Blacksmith and stays serial on hosted runners; manual and release dispatches always select it when the target contains the proof.
 - **CI routing-only edits, the small set of core-test fixtures the fast task runs directly, and narrow plugin contract helper edits** use a fast Node-only manifest path: `preflight`, `security-fast`, and only the fast lanes the change touches — a single `checks-fast-core` CI-routing task, the plugin contract job, or both. That path skips build artifacts, Node 22 compatibility, channel contracts, full core shards, bundled-plugin shards, and additional guard matrices.
 - **QA Smoke on pull requests** runs only when the diff touches a QA-owned surface: the qa-lab harness, `qa/` scenario data, the matrix/telegram channels the smoke profile drives, the docker packaging scripts, or the gate's own orchestration. Broad runtime changes (src, ui, packages, dependency manifests) no longer select the six-part smoke matrix per PR; every canonical `main` push and release validation still runs the full profile set, so runtime regressions surface one push after merge instead of taxing every PR with roughly five extra hosted-runner minutes.
+- **Published upgrades on pull requests** run the latest-release `legacy-operator-state` survivor inside `docker-seed-e2e` when update, doctor, state/schema, or survivor owners change. Both schema-version constants are covered even when no updater source changes. Every canonical `main` push selects this lane independently of the diff; expanded release history stays in Package Acceptance and the weekly Update Migration workflow.
 - **Windows Node checks** are scoped to Windows-specific process/path wrappers, npm/pnpm/UI runner helpers, package manager config, and the CI workflow surfaces that execute that lane; unrelated source, plugin, install-smoke, and test-only changes stay on the Linux Node lanes. Test-only changes to any explicit target in `test:windows:ci:1` or `test:windows:ci:2` also select the existing Windows lane; these package scripts own its test inventory.
 
 The slowest Node test families are split or balanced so each job stays small without over-reserving runners:
@@ -768,6 +783,19 @@ bucket, that means a 6,000-registration operating target, leaving headroom for
 concurrent repositories, retries, and burst overlap.
 
 The protected cache warmer has two platform rows: the existing Linux workload and one hosted macOS pnpm-store publisher. Its per-ref concurrency and pending-run coalescing are unchanged. Each admitted warmer run adds one hosted macOS job and no Blacksmith registrations; pull-request CI adds no writers or jobs. Native producer and consumer measurements must include cache transfer, extraction, installation, and archive size before claiming a setup-time saving.
+
+The published-upgrade PR/main tripwire reuses the reserved `docker-seed-e2e` job,
+so the retained peak envelope stays `4 × 144 + 21 × 200 = 4,776` registrations.
+The weekly Update Migration dispatch uses at most four existing targeted Docker
+jobs, each running its two scenarios sequentially, plus image preparation, the
+group planner, and the hybrid ref validator: at most seven Blacksmith
+registrations per weekly run. Its separate non-canceling concurrency group
+coalesces pending scheduled runs and cannot cancel manual validation. Release
+checks reuse the same bounded grouping and unchanged 32-job cap: at four
+distinct baselines, normal Package Acceptance selects 16 targeted jobs and
+release soak selects 32. The additional weekly burst and expanded release jobs
+share the existing headroom for releases, adjacent repositories, and carryover;
+the live shared bucket must still be checked before further fanout changes.
 
 The three Mac Node parts add two hosted jobs per run on `github` and `hybrid`, with no added Blacksmith registrations there. Normal Blacksmith routing adds two registrations per qualifying attempt-1 push or trusted PR; manual runs, retries, and untrusted PRs remain hosted. The matrix concurrency cap is three. GitHub's documented Enterprise macOS concurrency allowance is 50, shared with other hosted Mac workflows; it does not guarantee immediate runner admission. No runner class or repository capacity setting changes with this split.
 
@@ -1208,7 +1236,21 @@ see [Testing updates and plugins](/help/testing-updates-plugins).
 
 Release checks call Package Acceptance with `source=artifact`, the prepared release package artifact, `suite_profile=custom`, `docker_lanes='doctor-switch update-channel-switch skill-install update-corrupt-plugin upgrade-survivor published-upgrade-survivor root-managed-vps-upgrade update-restart-auth plugins-offline plugin-update plugin-binding-command-escape'`, and `telegram_mode=mock-openai`. This keeps package migration, update, live ClawHub skill install, stale-plugin-dependency cleanup, configured-plugin install repair, offline plugin, plugin-update, and Telegram proof on the same resolved package tarball. Set `release_package_spec` on Full Release Validation or OpenClaw Release Checks after publishing a beta to run the same matrix against the shipped npm package without rebuilding; set `package_acceptance_package_spec` only when Package Acceptance needs a different package from the rest of release validation. Cross-OS release checks still cover OS-specific onboarding, installer, and platform behavior; package/update product validation should start with Package Acceptance.
 
-The `published-upgrade-survivor` Docker lane validates one published package baseline per run in the blocking release path. In Package Acceptance, the resolved `package-under-test` tarball is always the candidate and `published_upgrade_survivor_baseline` selects the fallback published baseline, defaulting to `openclaw@latest`; failed-lane rerun commands preserve that baseline. Full Release Validation with `run_release_soak=true` or `release_profile=full` keeps the latest stable baseline, resolved once to an exact npm package before fanout, and sets `published_upgrade_survivor_scenarios=reported-issues` to exercise every issue-shaped fixture for Feishu config, preserved bootstrap/persona files, configured OpenClaw plugin installs, tilde log paths, and stale legacy plugin dependency roots. Expanded published-upgrade survivor and update-migration selections are split by baseline into groups of at most three scenarios, with at most 32 targeted Docker jobs active per matrix. Grouping shares the execution planner’s baseline-compatibility policy, so every supported scenario runs exactly once without creating empty shards for old baselines. Each scenario still owns a fresh container and the unchanged npm resource limit; package and image identities remain shared across the matrix. The separate `Update Migration` workflow defaults to that same latest stable baseline and the `plugin-deps-cleanup` scenario. Pass `baselines=all-since-2026.4.23` for exhaustive historical cleanup; `last-stable-4`, `release-history`, and exact historical versions also remain explicit manual selections. Local aggregate runs can pass exact package specs with `OPENCLAW_UPGRADE_SURVIVOR_BASELINE_SPECS`, keep a single lane with `OPENCLAW_UPGRADE_SURVIVOR_BASELINE_SPEC` such as `openclaw@2026.4.15`, or set `OPENCLAW_UPGRADE_SURVIVOR_SCENARIOS` for the scenario matrix. The published lane configures the baseline with a baked `openclaw config set` command recipe, records recipe steps in `summary.json`, and probes `/healthz`, `/readyz`, plus RPC status after Gateway start. The Windows packaged and installer fresh lanes also verify that an installed package can import a browser-control override from a raw absolute Windows path. The OpenAI cross-OS agent-turn smoke defaults to `OPENCLAW_CROSS_OS_OPENAI_MODEL` when set, otherwise `openai/gpt-5.6-luna`, so the install and gateway proof uses the lower-cost GPT-5.6 test tier.
+The `published-upgrade-survivor` Docker lane validates one published package baseline per scenario. In Package Acceptance, the resolved `package-under-test` tarball is always the candidate and `published_upgrade_survivor_baseline` selects the fallback published baseline, defaulting to `openclaw@latest`; failed-lane rerun commands preserve that baseline. Release checks set `published_upgrade_survivor_baselines=supported-lines`: npm's current `latest`, the preceding stable version, `extended-stable` when that tag exists, and the documented oldest supported baseline `2026.6.34`. The resolver reads `npm view openclaw versions` and `npm view openclaw dist-tags` at run time, pins exact versions before fanout, and deduplicates overlapping lines. Normal release checks retain `base` and add `legacy-operator-state`; release soak selects `reported-issues`, including legacy operator state and the existing issue-shaped fixtures.
+
+Expanded published-upgrade survivor and update-migration selections are split by baseline into groups of at most three scenarios, with at most 32 targeted Docker jobs active per matrix. Grouping shares the execution planner's baseline-compatibility policy, so every supported scenario runs exactly once without creating empty shards for old baselines. Each scenario owns a fresh container and the unchanged npm resource limit; package and image identities remain shared across the matrix. `Update Migration` runs weekly on Sunday at 03:17 UTC and on manual dispatch. It defaults to `supported-lines` with both `plugin-deps-cleanup` and `legacy-operator-state`, keeps the existing cleanup coverage, and forwards no provider secrets. A planning allowance of 12 minutes per scenario plus 30 minutes for shared package/image preparation and controls gives about 102 runner-minutes weekly with three distinct baselines, or 126 with four; actual timing artifacts determine the observed cost.
+
+Pass `baselines=all-since-2026.4.23` for exhaustive historical cleanup; `last-stable-4`, `release-history`, and exact historical versions remain explicit manual selections. Local aggregate runs can pass the resolved exact specs through `OPENCLAW_UPGRADE_SURVIVOR_BASELINE_SPECS`, keep a single lane with `OPENCLAW_UPGRADE_SURVIVOR_BASELINE_SPEC`, or set `OPENCLAW_UPGRADE_SURVIVOR_SCENARIOS` for the scenario matrix. Existing scenarios retain their baked `openclaw config set` recipes and summary records. The new operator-state scenario instead uses the baseline's own agent, exec-approvals, cron, and plugin CLIs, then verifies preserved state and a mock-provider turn after upgrade. Gateway probes include `/healthz`, `/readyz`, and RPC status. See [Testing updates and plugins](/help/testing-updates-plugins) for the unfenced `2026.9.2` updater's typed-refusal expectation when a state migration is pending.
+
+The temporary typed-refusal pass applies only to the CLI-authored
+`legacy-operator-state` scenario, which proves the baseline can start before the
+update. Existing synthetic `base` and reported-issue fixtures retain their
+success expectations: some deliberately require candidate migrations before
+they can start, so expanded matrices can still expose their conflict with the
+`2026.9.2` updater's refusal. The lane does not run an extra Doctor or omit those
+fixtures to turn that gap into a pass.
+
+The Windows packaged and installer fresh lanes also verify that an installed package can import a browser-control override from a raw absolute Windows path. The OpenAI cross-OS agent-turn smoke defaults to `OPENCLAW_CROSS_OS_OPENAI_MODEL` when set, otherwise `openai/gpt-5.6-luna`, so the install and gateway proof uses the lower-cost GPT-5.6 test tier.
 
 ### Legacy compatibility windows
 
