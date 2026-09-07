@@ -5,7 +5,6 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import { assertAgentReplyContainsMarker } from "../agent-turn-output.mjs";
-import { readTcpPortEnv } from "../env-limits.mjs";
 
 const MODEL = "survivor/gpt-5.6-luna";
 const JOBS = [
@@ -96,7 +95,7 @@ function approvalsCommand() {
 
 export function seedLegacyOperatorState() {
   const workspace = requiredEnv("OPENCLAW_TEST_WORKSPACE_DIR");
-  const mockPort = readTcpPortEnv("OPENCLAW_UPGRADE_SURVIVOR_MOCK_PORT", 44081);
+  const mockPort = 44081;
   const set = (key, value) =>
     cli(
       ["config", "set", key, JSON.stringify(value), "--strict-json"],

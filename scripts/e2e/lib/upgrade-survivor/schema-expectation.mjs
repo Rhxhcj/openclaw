@@ -136,11 +136,21 @@ function assertOutcome(
   errorFile,
   observationRoot,
   packageRoot,
+  acceptedOutcome,
 ) {
   const snapshot = readJson(snapshotFile);
   const expected = expectedOutcome(snapshot);
   if (expected === "success") {
-    assert.equal(Number(exitCode), 0, "baseline requires a successful update");
+    // The updater result classifier owns post-core warnings; they can exit 1
+    // after installing the candidate and completing its schema migrations.
+    assert(
+      acceptedOutcome === "success" || acceptedOutcome === "recoverable",
+      "update outcome was not accepted by the updater result checks",
+    );
+    assert(
+      Number(exitCode) === 0 || (acceptedOutcome === "recoverable" && Number(exitCode) === 1),
+      "baseline requires a successful or validated recoverable update",
+    );
     assert.equal(installedVersion, snapshot.candidateVersion, "candidate package is not installed");
     const databases = readSchemas(snapshot.stateDir);
     const currentPaths = new Set(databases.map((database) => database.relative));
@@ -210,8 +220,8 @@ function assertOutcome(
 try {
   const [command, ...args] = process.argv.slice(2);
   assert(
-    (command === "prepare" && args.length === 5) || (command === "assert" && args.length === 7),
-    "usage: schema-expectation.mjs prepare <baseline-version> <candidate.tgz> <state-dir> <snapshot.json> <package-root> | assert <snapshot.json> <exit-code> <installed-version> <update.json> <update.err> <observation-root> <package-root>",
+    (command === "prepare" && args.length === 5) || (command === "assert" && args.length === 8),
+    "usage: schema-expectation.mjs prepare <baseline-version> <candidate.tgz> <state-dir> <snapshot.json> <package-root> | assert <snapshot.json> <exit-code> <installed-version> <update.json> <update.err> <observation-root> <package-root> <accepted-outcome>",
   );
   process.stdout.write(`${command === "prepare" ? prepare(...args) : assertOutcome(...args)}\n`);
 } catch (error) {

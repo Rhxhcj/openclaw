@@ -94,7 +94,7 @@ function fixture(
     });
   const prepared = run("prepare", baselineVersion, tarball, stateDir, snapshotFile, packageRoot);
   expect(prepared.status, prepared.stderr).toBe(0);
-  function check(exitCode = 1, installedVersion = baselineVersion) {
+  function check(exitCode = 1, installedVersion = baselineVersion, acceptedOutcome = "success") {
     writeFileSync(updateFile, JSON.stringify(update));
     return run(
       "assert",
@@ -105,6 +105,7 @@ function fixture(
       errorFile,
       observationRoot,
       packageRoot,
+      acceptedOutcome,
     );
   }
   return {
@@ -122,6 +123,22 @@ function fixture(
 }
 
 describe("published survivor schema outcome", () => {
+  it.each([
+    [0, "success", true],
+    [1, "success", false],
+    [0, "recoverable", true],
+    [1, "recoverable", true],
+    [2, "recoverable", false],
+  ] as const)(
+    "checks migrated schemas after exit %i classified as %s",
+    (code, outcome, accepted) => {
+      const lane = fixture("2026.9.1");
+      writeSchema(lane.stateDatabase, 16);
+      const result = lane.check(code, lane.candidateVersion, outcome);
+      expect(result.status, result.stderr).toBe(accepted ? 0 : 1);
+    },
+  );
+
   it.each([
     ["2026.9.2", 15, 19, "schema-refusal"],
     ["2026.9.2-rebuild.1", 15, 19, "schema-refusal"],

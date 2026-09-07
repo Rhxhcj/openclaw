@@ -3905,6 +3905,10 @@ NODE
   ])(
     "gates only canonical main pushes with the published upgrade ($repository $ref)",
     ({ repository, ref, expected }) => {
+      const push = readCiWorkflow().on.push;
+      expect(push.branches).toEqual(["main"]);
+      expect(push).not.toHaveProperty("paths");
+      expect(push).not.toHaveProperty("paths-ignore");
       const result = runCiManifestFixture({
         bundledPlanner: true,
         eventName: "push",

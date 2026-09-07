@@ -956,7 +956,7 @@ prepare_schema_expectation() {
 assert_schema_outcome() {
   node scripts/e2e/lib/upgrade-survivor/schema-expectation.mjs assert \
     "$ARTIFACT_ROOT/schema-before.json" "$update_exit_code" "$installed_version" \
-    "$UPDATE_JSON" "$UPDATE_ERR" "$initial_update_observation_root" "$(package_root)"
+    "$UPDATE_JSON" "$UPDATE_ERR" "$initial_update_observation_root" "$(package_root)" "$update_outcome"
 }
 
 assert_legacy_operator_update_noop() {
@@ -1355,9 +1355,10 @@ update_candidate() {
   if [ "$after_repair" != "1" ] && [ "$update_status" -le 1 ] && node scripts/e2e/lib/upgrade-survivor/assertions.mjs \
     assert-recoverable-update-json "$update_json" "$candidate_version" "$observation_root" "$baseline_version" >"$ARTIFACT_ROOT/update-result-check.log" 2>&1; then
     update_repair_required="1"
+    update_outcome="recoverable"
   elif [ "$update_status" -eq 0 ] && node scripts/e2e/lib/upgrade-survivor/assertions.mjs \
     assert-successful-update-json "$update_json" "$candidate_version" "$observation_root"; then
-    :
+    update_outcome="success"
   else
     echo "openclaw update failed before the recoverable post-core boundary" >&2
     local validate_status=0

@@ -3574,7 +3574,7 @@ src/state/openclaw-agent-db-readonly.ts	1
 src/state/openclaw-agent-db-registry-listing.ts	3
 src/state/openclaw-agent-db-registry.ts	7
 src/state/openclaw-agent-db-schema-helpers.ts	1
-src/state/openclaw-agent-db-schema.ts	3
+src/state/openclaw-agent-db-schema.ts	2
 src/state/openclaw-agent-db-session-migrations.ts	4
 src/state/openclaw-agent-db-session-provenance.ts	2
 src/state/openclaw-agent-standing-intents-schema.ts	1
@@ -3877,7 +3877,7 @@ ui/src/pages/chat/chat-send-ack.ts	2
 ui/src/pages/chat/chat-send-composer.ts	1
 ui/src/pages/chat/chat-send-request.ts	1
 ui/src/pages/chat/chat-send-timing.ts	6
-ui/src/pages/chat/chat-session-companion.ts	5
+ui/src/pages/chat/chat-session-companion.ts	3
 ui/src/pages/chat/chat-state-events.ts	6
 ui/src/pages/chat/chat-state-page.ts	5
 ui/src/pages/chat/chat-state-route.ts	1
