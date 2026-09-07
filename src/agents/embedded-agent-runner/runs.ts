@@ -988,8 +988,12 @@ export function prepareEmbeddedAgentRunCompletionClaim(
   sessionId: string,
   runId: string,
 ): {
+  bindOperationalRunInstance: (
+    instance: NonNullable<EmbeddedRunRegistration["operationalRunInstance"]>,
+  ) => boolean;
   claimCompletion: () => boolean;
   claimFailure: () => boolean;
+  resolveCurrentRegistration: () => EmbeddedRunCompletionRegistration | undefined;
   registered: Promise<EmbeddedRunCompletionRegistration | undefined>;
 } {
   let registrationSettled = false;
@@ -1024,9 +1028,56 @@ export function prepareEmbeddedAgentRunCompletionClaim(
       isAgentEventLifecycleGenerationCurrent(claim.lifecycleGeneration)
     );
   };
+  const bindOperationalRunInstance = (
+    instance: NonNullable<EmbeddedRunRegistration["operationalRunInstance"]>,
+  ): boolean => {
+    if (
+      EMBEDDED_RUN_COMPLETION_CLAIMS.get(sessionId) !== claim ||
+      !isAgentEventLifecycleGenerationCurrent(claim.lifecycleGeneration) ||
+      instance.runId !== runId ||
+      (claim.operationalRunInstance !== undefined && claim.operationalRunInstance !== instance)
+    ) {
+      return false;
+    }
+    claim.operationalRunInstance = instance;
+    return true;
+  };
+  const resolveCurrentRegistration = (): EmbeddedRunCompletionRegistration | undefined => {
+    if (
+      EMBEDDED_RUN_COMPLETION_CLAIMS.get(sessionId) !== claim ||
+      !isAgentEventLifecycleGenerationCurrent(claim.lifecycleGeneration)
+    ) {
+      return undefined;
+    }
+    const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
+    const registration = handle ? ACTIVE_EMBEDDED_RUN_REGISTRATIONS.get(handle) : undefined;
+    const toolAuthority = registration?.toolAuthority;
+    if (
+      !handle ||
+      handle.runId !== runId ||
+      !toolAuthority ||
+      !claim.operationalRunInstance ||
+      registration.operationalRunInstance !== claim.operationalRunInstance
+    ) {
+      return undefined;
+    }
+    try {
+      toolAuthority.assertActive();
+    } catch {
+      return undefined;
+    }
+    return EMBEDDED_RUN_COMPLETION_CLAIMS.get(sessionId) === claim &&
+      ACTIVE_EMBEDDED_RUNS.get(sessionId) === handle &&
+      ACTIVE_EMBEDDED_RUN_REGISTRATIONS.get(handle) === registration &&
+      isAgentEventLifecycleGenerationCurrent(claim.lifecycleGeneration)
+      ? { toolAuthority }
+      : undefined;
+  };
   return {
+    bindOperationalRunInstance,
     claimCompletion: () => consume(false),
     claimFailure: () => consume(true),
+    resolveCurrentRegistration,
     registered,
   };
 }
@@ -1602,6 +1653,7 @@ export function setActiveEmbeddedRun(
         ? runContext.projectSessionActive
         : undefined,
     toolAuthority,
+    operationalRunInstance,
     sessionId,
     agentId,
     ...(sessionKey ? { sessionKey } : {}),
@@ -1657,7 +1709,9 @@ export function setActiveEmbeddedRun(
   if (
     completionClaim &&
     completionClaim.runId === handle.runId &&
-    completionClaim.lifecycleGeneration === incomingLifecycleGeneration
+    completionClaim.lifecycleGeneration === incomingLifecycleGeneration &&
+    (completionClaim.operationalRunInstance === undefined ||
+      completionClaim.operationalRunInstance === operationalRunInstance)
   ) {
     completionClaim.promoted = true;
     completionClaim.settleRegistration(toolAuthority ? { toolAuthority } : undefined);
