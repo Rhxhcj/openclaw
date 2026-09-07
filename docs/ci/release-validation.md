@@ -224,7 +224,28 @@ see [Testing updates and plugins](/help/testing-updates-plugins).
 
 Release checks call Package Acceptance with `source=artifact`, the prepared release package artifact, `suite_profile=custom`, `docker_lanes='doctor-switch update-channel-switch skill-install update-corrupt-plugin upgrade-survivor published-upgrade-survivor root-managed-vps-upgrade update-restart-auth plugins-offline plugin-update plugin-binding-command-escape'`, and `telegram_mode=mock-openai`. This keeps package migration, update, live ClawHub skill install, stale-plugin-dependency cleanup, configured-plugin install repair, offline plugin, plugin-update, and Telegram proof on the same resolved package tarball. Set `release_package_spec` on Full Release Validation or OpenClaw Release Checks after publishing a beta to run the same matrix against the shipped npm package without rebuilding; set `package_acceptance_package_spec` only when Package Acceptance needs a different package from the rest of release validation. Cross-OS release checks still cover OS-specific onboarding, installer, and platform behavior; package/update product validation should start with Package Acceptance.
 
-The `published-upgrade-survivor` Docker lane validates one published package baseline per scenario. In Package Acceptance, the resolved `package-under-test` tarball is always the candidate and `published_upgrade_survivor_baseline` selects the fallback published baseline, defaulting to `openclaw@latest`; failed-lane rerun commands preserve that baseline. Release checks set `published_upgrade_survivor_baselines=supported-lines`: npm's current `latest`, the preceding stable version, `extended-stable` when that tag exists, and the documented oldest supported baseline `2026.6.34`. The resolver reads `npm view openclaw versions` and `npm view openclaw dist-tags` at run time, pins exact versions before fanout, and deduplicates overlapping lines. Normal release checks retain `base` and add `legacy-operator-state`; release soak selects `reported-issues`, including legacy operator state and the existing issue-shaped fixtures.
+The `published-upgrade-survivor` Docker lane validates one published package baseline per scenario. In Package Acceptance, the resolved `package-under-test` tarball is always the candidate and `published_upgrade_survivor_baseline` selects the fallback published baseline, defaulting to `openclaw@latest`; failed-lane rerun commands preserve that baseline. Current source release checks set `published_upgrade_survivor_baselines=supported-lines`: npm's current `latest`, the preceding stable version, `extended-stable` when that tag exists, and the documented oldest supported baseline `2026.6.34`. The resolver reads `npm view openclaw versions` and `npm view openclaw dist-tags` at run time, pins exact versions before fanout, and deduplicates overlapping lines. Normal current-source release checks retain `base` and add `legacy-operator-state`; release soak selects `reported-issues`, including legacy operator state and the existing issue-shaped fixtures.
+
+Expanded release qualification requires the candidate's `YYYY.M.PATCH` base version
+to be at least the trusted workflow package's base version, ignoring prerelease
+suffixes for this comparison. It then reads immutable source-directory metadata for
+the operator-state harness. Older source targets and extended-stable contexts
+or branches keep the validated candidate-relative predecessor. Published
+candidates also keep that predecessor when they predate npm's current `latest`;
+current published candidates with the harness can expand `supported-lines`.
+Their exact specs are pinned from that checked registry snapshot, and none may
+be newer than the candidate; later tag movement cannot change the selected set.
+A separate `package_acceptance_package_spec` override resolves its predecessor
+from the override's actual package version inside Package Acceptance.
+
+The child workflow prepares or reuses the prerelease plugin registry required
+by the new scenario's artifact assertions, so that scenario runs only for
+qualifying unpublished candidates. Published requalification retains `base`, or every preexisting
+reported-issue scenario for soak, because its package path does not prepare
+that registry. Historical qualification likewise excludes only the newly added
+operator-state scenario. Existing frozen-target compatibility checks and the
+explicit scenario-omission opt-in remain unchanged; candidate source code is
+never executed to choose this profile.
 
 Expanded published-upgrade survivor and update-migration selections are split by baseline into groups of at most three scenarios, with at most 32 targeted Docker jobs active per matrix. Grouping shares the execution planner's baseline-compatibility policy, so every supported scenario runs exactly once without creating empty shards for old baselines. Each scenario owns a fresh container and the unchanged npm resource limit; package and image identities remain shared across the matrix. `Update Migration` runs weekly on Sunday at 03:17 UTC and on manual dispatch. It defaults to `supported-lines` with both `plugin-deps-cleanup` and `legacy-operator-state`, keeps the existing cleanup coverage, and forwards no provider secrets. A planning allowance of 12 minutes per scenario plus 30 minutes for shared package/image preparation and controls gives about 102 runner-minutes weekly with three distinct baselines, or 126 with four; actual timing artifacts determine the observed cost.
 
