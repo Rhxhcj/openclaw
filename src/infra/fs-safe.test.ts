@@ -1,14 +1,12 @@
 // Tests safe filesystem wrappers and protected file-handle behavior.
+import fsSync from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { __setFsSafeTestHooksForTest } from "@openclaw/fs-safe/test-hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withEnv, withEnvAsync } from "../test-utils/env.js";
-import {
-  createRebindableDirectoryAlias,
-  withRealpathSymlinkRebindRace,
-} from "../test-utils/symlink-rebind-race.js";
+import { createRebindableDirectoryAlias } from "../test-utils/symlink-rebind-race.js";
 import { createTrackedTempDirs } from "../test-utils/tracked-temp-dirs.js";
 import {
   resolveOpenedFileRealPathForHandle,
@@ -39,38 +37,80 @@ async function expectRejectCode(promise: Promise<unknown>, expected: string | Re
   }
 }
 
-async function runWriteOpenRace(params: {
+type RetargetObservation = "realpath" | "write-mode" | "opened-path";
+
+async function withSymlinkRetargetAtObservation(params: {
   slotPath: string;
   outsideDir: string;
-  runWrite: () => Promise<void>;
+  observedPath: string;
+  observation: RetargetObservation;
+  run: () => Promise<void>;
 }): Promise<void> {
-  await withRealpathSymlinkRebindRace({
-    shouldFlip: (realpathInput) => realpathInput.endsWith(path.join("slot", "target.txt")),
-    symlinkPath: params.slotPath,
-    symlinkTarget: params.outsideDir,
-    timing: "before-realpath",
+  let flipped = false;
+  const flip = (target: fsSync.PathLike) => {
+    if (flipped || String(target) !== params.observedPath) {
+      return;
+    }
+    // Replace only the owned fixture alias; preserve Windows junction semantics.
+    fsSync.rmSync(params.slotPath, { recursive: true, force: true });
+    fsSync.symlinkSync(
+      params.outsideDir,
+      params.slotPath,
+      process.platform === "win32" ? "junction" : undefined,
+    );
+    flipped = true;
+  };
+  const restore = (() => {
+    if (params.observation === "opened-path") {
+      // Linux can resolve an open descriptor without consulting its lexical path.
+      __setFsSafeTestHooksForTest({ afterOpenedPathIdentityCheck: flip });
+      return () => __setFsSafeTestHooksForTest(undefined);
+    }
+    if (params.observation === "write-mode") {
+      // A missing copy destination never reaches opened-file realpath resolution.
+      const realLstat = fsSync.lstatSync;
+      const spy = vi.spyOn(fsSync, "lstatSync").mockImplementation((...args) => {
+        if (args[1]?.bigint) {
+          flip(args[0]);
+        }
+        return realLstat(...args);
+      });
+      return () => spy.mockRestore();
+    }
+    const realRealpath = fsSync.realpathSync.native;
+    const spy = vi.spyOn(fsSync.realpathSync, "native").mockImplementation((...args) => {
+      flip(args[0]);
+      return realRealpath(...args);
+    });
+    return () => spy.mockRestore();
+  })();
+  try {
+    await params.run();
+    expect(flipped).toBe(true);
+    await expect(fs.realpath(params.slotPath)).resolves.toBe(params.outsideDir);
+  } finally {
+    restore();
+  }
+}
+
+async function runSymlinkWriteRace(params: {
+  slotPath: string;
+  outsideDir: string;
+  observation: RetargetObservation;
+  runWrite: (relativePath: string) => Promise<void>;
+}): Promise<void> {
+  await withSymlinkRetargetAtObservation({
+    ...params,
+    observedPath: path.join(params.slotPath, "target.txt"),
     run: async () => {
       try {
-        await params.runWrite();
+        await params.runWrite(path.join("slot", "target.txt"));
       } catch (err) {
         expect((err as NodeJS.ErrnoException).code).toMatch(
           /outside-workspace|path-mismatch|path-alias|invalid-path|not-file/,
         );
       }
     },
-  });
-}
-
-async function runSymlinkWriteRace(params: {
-  slotPath: string;
-  outsideDir: string;
-  runWrite: (relativePath: string) => Promise<void>;
-}): Promise<void> {
-  const relativePath = path.join("slot", "target.txt");
-  await runWriteOpenRace({
-    slotPath: params.slotPath,
-    outsideDir: params.outsideDir,
-    runWrite: async () => await params.runWrite(relativePath),
   });
 }
 
@@ -531,6 +571,7 @@ describe("fs-safe", () => {
     await runSymlinkWriteRace({
       slotPath: slot,
       outsideDir: outside,
+      observation: "realpath",
       runWrite: async (relativePath) =>
         await (
           await openRoot(root)
@@ -550,6 +591,7 @@ describe("fs-safe", () => {
     await runSymlinkWriteRace({
       slotPath: slot,
       outsideDir: outside,
+      observation: "realpath",
       runWrite: async (relativePath) =>
         await (
           await openRoot(root)
@@ -569,11 +611,11 @@ describe("fs-safe", () => {
         seedInsideTarget: true,
       });
 
-      await withRealpathSymlinkRebindRace({
-        shouldFlip: (realpathInput) => realpathInput.endsWith(path.join("slot")),
-        symlinkPath: slot,
-        symlinkTarget: outside,
-        timing: "before-realpath",
+      await withSymlinkRetargetAtObservation({
+        slotPath: slot,
+        outsideDir: outside,
+        observedPath: slot,
+        observation: "realpath",
         run: async () => {
           await expectRejectCode(
             (await openRoot(root)).remove(path.join("slot", "target.txt")),
@@ -599,11 +641,11 @@ describe("fs-safe", () => {
         targetPath: inside,
       });
 
-      await withRealpathSymlinkRebindRace({
-        shouldFlip: (realpathInput) => realpathInput.endsWith(path.join("slot")),
-        symlinkPath: slot,
-        symlinkTarget: outside,
-        timing: "before-realpath",
+      await withSymlinkRetargetAtObservation({
+        slotPath: slot,
+        outsideDir: outside,
+        observedPath: slot,
+        observation: "realpath",
         run: async () => {
           await expectRejectCode(
             (await openRoot(root)).mkdir(path.join("slot", "nested", "deep")),
@@ -625,6 +667,7 @@ describe("fs-safe", () => {
     await runSymlinkWriteRace({
       slotPath: slot,
       outsideDir: outside,
+      observation: "write-mode",
       runWrite: async (relativePath) =>
         await (
           await openRoot(root)
