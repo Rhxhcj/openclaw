@@ -31,14 +31,17 @@ so the retained peak envelope stays `4 × 144 + 21 × 200 = 4,776` registrations
 Removing push path exclusions admits docs-only main tips into the same two
 non-canceling parity slots; the bound still includes both active runs and both
 coalesced successors. It does not assume that every pushed commit starts a run.
-The weekly Update Migration dispatch uses at most four existing targeted Docker
-jobs, each running its two scenarios sequentially, plus image preparation, the
-group planner, and the hybrid ref validator: at most seven Blacksmith
-registrations per weekly run. Its separate non-canceling concurrency group
+The weekly Update Migration dispatch uses one targeted Docker group per
+supported baseline for native operator state and keeps synthetic cleanup on
+the candidate-relative predecessor. If that predecessor is outside the
+supported set, it adds one existing matrix row: at most five targeted jobs,
+plus image preparation, the group planner, and the hybrid ref validator, for
+at most eight Blacksmith registrations per weekly run. Its separate non-canceling concurrency group
 coalesces pending scheduled runs and cannot cancel manual validation. Release
 checks reuse the same bounded grouping and unchanged 32-job cap: at four
-distinct baselines, normal Package Acceptance selects 16 targeted jobs and
-release soak selects 32. The additional weekly burst and expanded release jobs
+distinct baselines, normal Package Acceptance selects 16 targeted jobs (17
+when the predecessor needs its own row) and release soak selects 20. The
+three-scenario group limit and 32-job concurrency cap are unchanged. The additional weekly burst and expanded release jobs
 share the existing headroom for releases, adjacent repositories, and carryover;
 the live shared bucket must still be checked before further fanout changes.
 
