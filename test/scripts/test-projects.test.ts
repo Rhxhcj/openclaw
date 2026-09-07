@@ -1441,6 +1441,7 @@ describe("scripts/test-projects changed-target routing", () => {
         "test/scripts/package-source-preflight.test.ts",
         "test/scripts/release-ci-summary.test.ts",
         "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/upgrade-survivor-baselines.test.ts",
       ],
     );
   });
