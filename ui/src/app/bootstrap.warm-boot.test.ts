@@ -26,9 +26,10 @@ describe("warm boot profile validation", () => {
     { cachedProfileId: null, profileId: "profile-b", clears: 1 },
     { cachedProfileId: "profile-a", profileId: "profile-a", clears: 0 },
     { cachedProfileId: null, profileId: null, clears: 0 },
+    { cachedProfileId: "profile-a", profileId: "profile-b", clears: 0, credentialsChanged: true },
   ])(
-    "clears $clears times for cached $cachedProfileId and connected $profileId",
-    async ({ cachedProfileId, profileId, clears }) => {
+    "clears $clears times for cached $cachedProfileId and connected $profileId (credential change: $credentialsChanged)",
+    async ({ cachedProfileId, profileId, clears, credentialsChanged }) => {
       const previousUrl = window.location.href;
       window.history.replaceState({}, "", "/focus/terminal");
       const scope = gatewayCredentialScope(loadSettings().gatewayUrl);
@@ -50,9 +51,11 @@ describe("warm boot profile validation", () => {
       const clearSnapshots = vi.spyOn(snapshots, "clearStoredChatSnapshots").mockResolvedValue();
       const clearRoster = vi.mocked(clearCachedBootState);
       const listeners = new Set<(snapshot: ApplicationGatewaySnapshot) => void>();
+      let connectionRevision = 0;
       const createGateway = gatewayStore.createApplicationGateway;
       vi.spyOn(gatewayStore, "createApplicationGateway").mockImplementation((...args) => {
         const gateway = createGateway(...args);
+        vi.spyOn(gateway, "connectionRevision", "get").mockImplementation(() => connectionRevision);
         vi.spyOn(gateway, "subscribe").mockImplementation((listener) => {
           listeners.add(listener);
           return () => listeners.delete(listener);
@@ -69,6 +72,9 @@ describe("warm boot profile validation", () => {
       };
       try {
         expect(runtime.warmBoot).toBe(true);
+        if (credentialsChanged) {
+          connectionRevision += 1;
+        }
         publish("connecting");
         expect(clearSnapshots).not.toHaveBeenCalled();
         expect(clearRoster).not.toHaveBeenCalled();

@@ -219,9 +219,13 @@ export function bootstrapApplication(): ApplicationRuntime {
   );
   const connectionBootstrap = createConnectionBootstrapCoordinator();
   const bootRecord = readBootRecord(gatewayCredentialScope(settings.gatewayUrl));
+  const bootConnectionRevision = gateway.connectionRevision;
   let pendingBootProfileId =
     documentMode === null && !hasPendingGateway ? bootRecord?.profileId : undefined;
   const stopBootProfileValidation = gateway.subscribe((snapshot) => {
+    if (gateway.connectionRevision !== bootConnectionRevision) {
+      pendingBootProfileId = undefined;
+    }
     if (snapshot.phase !== "connected" || pendingBootProfileId === undefined) {
       return;
     }
