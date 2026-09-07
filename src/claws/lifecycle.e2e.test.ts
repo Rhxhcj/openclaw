@@ -220,6 +220,7 @@ describe("claws lifecycle cli e2e", () => {
     const instance = await createOpenClawTestInstance({
       name: "claws-lifecycle-remove",
       env: {
+        OPENCLAW_TEST_MINIMAL_GATEWAY: undefined,
         OPENCLAW_EXPERIMENTAL_CLAWS: "1",
         OPENCLAW_DISABLE_BUNDLED_PLUGINS: "1",
       },
@@ -281,7 +282,7 @@ describe("claws lifecycle cli e2e", () => {
           agentRemoved: true,
         });
         const config = JSON.parse(await readFile(instance.configPath, "utf8"));
-        const canonicalStateDir = await realpath(instance.homeDir);
+        const canonicalStateDir = await realpath(instance.stateDir);
         expect(config.agents).toEqual({
           defaults: {
             heartbeat: { agentId: "main" },
