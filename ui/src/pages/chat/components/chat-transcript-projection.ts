@@ -278,6 +278,7 @@ export function projectChatTranscript(
   const resolveReplyPreview = createReplyPreviewResolver(loadedReplySources, props);
   const sharedMessageRenderOptions = {
     presented: props.presented,
+    bookmarkAccess: props.bookmarkAccess,
     onReply: props.onSetReply
       ? (target) => state.transcriptRenderContext.onSetReply?.(target)
       : undefined,
@@ -686,6 +687,9 @@ export function projectChatTranscript(
     props.queuedMessageAction?.id,
     props.queuedMessageAction?.label,
     props.queuedMessageAction?.onAction,
+    props.bookmarkAccess?.revision ?? 0,
+    Boolean(props.bookmarkAccess?.toggle),
+    Boolean(props.bookmarkAccess?.edit),
     props.replyMessageAccess?.revision ?? 0,
     props.replyMessageAccess?.navigationId ?? "",
     turnRecap === null ? "" : `${turnRecap.runtimeMs}:${turnRecap.outputTokens ?? ""}`,

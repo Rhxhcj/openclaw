@@ -2446,5 +2446,9 @@
   {
     "source": "PDF tool",
     "target": "PDF 工具"
+  },
+  {
+    "source": "Named message bookmarks",
+    "target": "命名消息书签"
   }
 ]
