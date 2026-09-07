@@ -2148,11 +2148,16 @@ describe("scripts/lib/ci-node-test-plan.mts", () => {
               ];
         })
         .toSorted((a, b) => a.groups.join("\0").localeCompare(b.groups.join("\0")));
+    // Only the tooling overlay changes; retain the real process-start source classification.
+    const unitFastPaths = await vi.importActual<
+      typeof import("../vitest/vitest.unit-fast-paths.mjs")
+    >("../vitest/vitest.unit-fast-paths.mjs");
     const createPlanWithInventory = async (
       includeGrowthFile: boolean,
       extraFiles: string[] = [],
     ) => {
       vi.resetModules();
+      vi.doMock("../vitest/vitest.unit-fast-paths.mjs", () => unitFastPaths);
       vi.doMock("../../scripts/lib/list-test-files.mts", async (importOriginal) => {
         const actual =
           await importOriginal<typeof import("../../scripts/lib/list-test-files.mts")>();
@@ -2180,6 +2185,7 @@ describe("scripts/lib/ci-node-test-plan.mts", () => {
         return createPlan(options);
       } finally {
         vi.doUnmock("../../scripts/lib/list-test-files.mts");
+        vi.doUnmock("../vitest/vitest.unit-fast-paths.mjs");
         vi.resetModules();
       }
     };
