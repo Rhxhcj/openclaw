@@ -13,6 +13,7 @@ import {
   openOpenClawStateDatabase,
 } from "../state/openclaw-state-db.js";
 import { openNodeSqliteDatabase } from "./node-sqlite.js";
+import { hasNodeErrorCode } from "./path-guards.js";
 import { runtimeProcessEntrypoints } from "./runtime-process-entrypoints.js";
 import { resolveRuntimeWorkerArgv, resolveRuntimeWorkerUrl } from "./runtime-worker-url.js";
 import { prepareUpdateCandidateRehearsal } from "./update-candidate-rehearsal.js";
@@ -547,3 +548,48 @@ it.each([
     }
   },
 );
+
+it("preserves an existing copied file behind a case-equivalent entry name", async (context) => {
+  const plugin = path.join(root, "case-plugin");
+  await fs.mkdir(plugin);
+  const lower = path.join(plugin, "entry.js");
+  const upper = path.join(plugin, "ENTRY.js");
+  const payload = 'export default "case alias survived";';
+  await fs.writeFile(path.join(plugin, "package.json"), '{"type":"module"}');
+  await fs.writeFile(lower, payload);
+  const upperReal = await fs.realpath(upper).catch((error: unknown) => {
+    if (hasNodeErrorCode(error, "ENOENT")) {
+      return undefined;
+    }
+    throw error;
+  });
+  if (upperReal !== (await fs.realpath(lower))) {
+    context.skip("Requires a case-insensitive fixture volume with canonical filename casing");
+  }
+  const rehearsal = await prepareUpdateCandidateRehearsal({
+    config: { plugins: { load: { paths: [upper] } } },
+    stateDir: path.join(root, "source-state"),
+    candidateRoot: root,
+  });
+  try {
+    const copied: OpenClawConfig = JSON.parse(await fs.readFile(rehearsal.configPath, "utf8"));
+    const entry = copied.plugins!.load!.paths![0]!;
+    expect(path.basename(entry)).toBe("ENTRY.js");
+    const result = await runCommandBuffered(
+      [
+        process.execPath,
+        "--input-type=module",
+        "-e",
+        `console.log((await import(${JSON.stringify(pathToFileURL(entry).href)})).default)`,
+      ],
+      { timeoutMs: 10_000 },
+    );
+    expect(result.code, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString().trim()).toBe("case alias survived");
+    expect((await fs.lstat(entry)).isFile()).toBe(true);
+    expect(await fs.readFile(lower, "utf8")).toBe(payload);
+    expect(await fs.readFile(upper, "utf8")).toBe(payload);
+  } finally {
+    await rehearsal.cleanup();
+  }
+});

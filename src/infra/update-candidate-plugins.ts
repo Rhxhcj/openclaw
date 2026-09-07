@@ -7,6 +7,7 @@ import type { PluginInstallRecord } from "../config/types.plugins.js";
 import { INSTALLED_PLUGIN_INDEX_STATE_KEY } from "../plugins/installed-plugin-index-row.js";
 import type { ConfigMachineStateDatabase } from "../state/config-machine-state.js";
 import { tableExists } from "../state/openclaw-state-db-schema-helpers.js";
+import { sameFileIdentity } from "./fs-safe-advanced.js";
 import { resolveUserPath } from "./home-dir.js";
 import {
   executeSqliteQuerySync,
@@ -176,9 +177,21 @@ export async function projectUpdateCandidatePlugins(params: {
     const alias = file && path.basename(source) !== path.basename(real) ? project(source) : target;
     if (alias !== target) {
       // Preserve the entry filename/ID, while Node resolves relative imports beside its copied target.
-      await fs.mkdir(path.dirname(alias), { recursive: true });
-      await fs.rm(alias, { force: true });
-      await fs.symlink(target, alias, "file");
+      const [existing, targetIdentity] = await Promise.all([
+        fs.stat(alias, { bigint: true }).catch((error: unknown) => {
+          if (hasNodeErrorCode(error, "ENOENT")) {
+            return undefined;
+          }
+          throw error;
+        }),
+        fs.stat(target, { bigint: true }),
+      ]);
+      // A case-equivalent name can already be this file; unlinking it would destroy the target.
+      if (!existing || !sameFileIdentity(existing, targetIdentity)) {
+        await fs.mkdir(path.dirname(alias), { recursive: true });
+        await fs.rm(alias, { force: true });
+        await fs.symlink(target, alias, "file");
+      }
     }
     pluginPaths[source] = alias;
   }
