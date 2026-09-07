@@ -173,7 +173,7 @@ export async function projectUpdateCandidatePlugins(params: {
       throw new Error("Plugin payload has no private copy root");
     }
     const target = path.join(copy[1], path.relative(copy[0], real));
-    const alias = file && source !== real ? project(source) : target;
+    const alias = file && path.basename(source) !== path.basename(real) ? project(source) : target;
     if (alias !== target) {
       // Preserve the entry filename/ID, while Node resolves relative imports beside its copied target.
       await fs.mkdir(path.dirname(alias), { recursive: true });

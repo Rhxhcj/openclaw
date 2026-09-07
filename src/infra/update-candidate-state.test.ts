@@ -353,7 +353,7 @@ it.each([
         `export default ${JSON.stringify(value)};`,
       );
     }
-    await fs.symlink(dependency, path.join(modulesDir, "dependency"), "dir");
+    await fs.symlink(dependency, path.join(modulesDir, "dependency"), "junction");
     await fs.writeFile(
       path.join(packageDir, "package.json"),
       JSON.stringify({
@@ -367,7 +367,7 @@ it.each([
       path.join(packageDir, "index.js"),
       'import host from "openclaw"; import dependency from "dependency"; export default {host, dependency};',
     );
-    await fs.symlink(liveHost, path.join(packageDir, "node_modules", "openclaw"), "dir");
+    await fs.symlink(liveHost, path.join(packageDir, "node_modules", "openclaw"), "junction");
     const registry = openOpenClawStateDatabase({ env: { OPENCLAW_STATE_DIR: source } }).db;
     registry
       .prepare(
@@ -437,9 +437,10 @@ it.each([
   { extension: "js", linked: false },
   { extension: "ts", linked: false },
   { extension: "js", linked: true },
+  { extension: "js", linked: false, directoryAlias: true },
 ])(
-  "preserves external .$extension entry imports and path identity (linked=$linked)",
-  async ({ extension, linked }) => {
+  "preserves external .$extension entry imports and path identity (linked=$linked, directoryAlias=$directoryAlias)",
+  async ({ extension, linked, directoryAlias = false }) => {
     const source = path.join(root, "source-state");
     const external = path.join(root, "external-plugin");
     const install = path.join(root, "installed-plugin");
@@ -465,13 +466,23 @@ it.each([
     );
     await fs.writeFile(path.join(install, "marker"), "installed payload");
     if (linked) {
-      await fs.symlink(install, sourcePackage, "dir");
+      await fs.symlink(install, sourcePackage, "junction");
       const aliasDirectory = path.join(root, "external-alias");
-      await fs.mkdir(aliasDirectory);
-      entry = path.join(aliasDirectory, `public-name.${extension}`);
-      await fs.symlink(realEntry, entry, "file");
+      if (process.platform === "win32") {
+        await fs.symlink(path.dirname(realEntry), aliasDirectory, "junction");
+        entry = path.join(aliasDirectory, path.basename(realEntry));
+      } else {
+        await fs.mkdir(aliasDirectory);
+        entry = path.join(aliasDirectory, `public-name.${extension}`);
+        await fs.symlink(realEntry, entry, "file");
+      }
     } else {
       await fs.writeFile(path.join(sourcePackage, "marker"), "source payload");
+    }
+    if (directoryAlias) {
+      const aliasDirectory = path.join(root, "directory-alias");
+      await fs.symlink(path.dirname(realEntry), aliasDirectory, "junction");
+      entry = path.join(aliasDirectory, path.basename(realEntry));
     }
     const registry = openOpenClawStateDatabase({ env: { OPENCLAW_STATE_DIR: source } }).db;
     registry
@@ -499,6 +510,9 @@ it.each([
       const copied: OpenClawConfig = JSON.parse(await fs.readFile(rehearsal.configPath, "utf8"));
       const copiedEntry = copied.plugins!.load!.paths![0]!;
       expect(path.basename(copiedEntry)).toBe(path.basename(entry));
+      if (directoryAlias) {
+        expect((await fs.lstat(copiedEntry)).isSymbolicLink()).toBe(false);
+      }
       expect(copiedEntry.startsWith(rehearsal.stateDir + path.sep)).toBe(true);
       const result = await runCommandBuffered(
         [
