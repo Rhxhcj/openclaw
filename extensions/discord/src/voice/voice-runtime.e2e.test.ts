@@ -9,6 +9,7 @@ defineDiscordVoiceTests(
     expect,
     it,
     vi,
+    expectDefined,
     createDefaultVoiceStates,
     createConnectionMock,
     joinVoiceChannelMock,
@@ -243,6 +244,7 @@ defineDiscordVoiceTests(
           groupPolicy: "open",
           allowFrom: ["discord:u-guest"],
           voice: {
+            mode: "stt-tts",
             model: "openai/gpt-5.4-mini",
           },
         },
@@ -588,6 +590,9 @@ defineDiscordVoiceTests(
 
     it("fetches guild metadata before allowlist checks when the session lacks a guild name", async () => {
       const client = createClient();
+      const channel = expectDefined(await client.fetchChannel("1001"), "voice channel");
+      channel.guild.name = "";
+      client.fetchChannel.mockResolvedValue(channel);
       client.fetchGuild.mockResolvedValue({ id: "g1", name: "Guild One" });
       client.fetchMember.mockResolvedValue({
         nickname: "Owner Nick",
