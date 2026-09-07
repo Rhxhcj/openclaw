@@ -25,7 +25,15 @@ suite.define(() => {
       updatedAt: 1,
     };
     const gateway = await installMockGateway(page, {
-      methodResponses: { "sessions.list": chatSessionListResponse([session]) },
+      sessions: [session],
+      methodResponses: {
+        "sessions.list": {
+          cases: [
+            { match: { spawnedBy: session.key }, response: chatSessionListResponse([]) },
+            { match: rosterMatch, response: chatSessionListResponse([session]) },
+          ],
+        },
+      },
       sessionKey: session.key,
     });
 
@@ -41,6 +49,18 @@ suite.define(() => {
       await pane.locator('[data-chat-permission-option="workspace"]').click();
       await gateway.waitForRequest("sessions.patch");
       await gateway.waitForRequest("sessions.list", { after: listRequests, match: rosterMatch });
+      // A child-list read can finish while the permission roster refresh is pending.
+      // It must not return its parent as a newer canonical permission fact.
+      await page.evaluate(async (key) => {
+        const app = document.querySelector("openclaw-app") as PermissionTestApp;
+        await app.runtime?.context.sessions.refreshList({
+          spawnedBy: key,
+          includeGlobal: false,
+          includeUnknown: false,
+          configuredAgentsOnly: true,
+          limit: 10000,
+        });
+      }, session.key);
       await gateway.rejectDeferred("sessions.list", {
         code: "UNAVAILABLE",
         message: "Roster refresh unavailable",
@@ -73,7 +93,15 @@ suite.define(() => {
       updatedAt: 1,
     };
     const gateway = await installMockGateway(page, {
-      methodResponses: { "sessions.list": chatSessionListResponse([session]) },
+      sessions: [session],
+      methodResponses: {
+        "sessions.list": {
+          cases: [
+            { match: { spawnedBy: session.key }, response: chatSessionListResponse([]) },
+            { match: rosterMatch, response: chatSessionListResponse([session]) },
+          ],
+        },
+      },
       sessionKey: session.key,
     });
 
